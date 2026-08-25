@@ -1,9 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, ChevronRight, Flame, Play, Sparkles, Target, TrendingUp } from "lucide-react";
+import {
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
+  ChevronRight,
+  ClipboardCheck,
+  Flame,
+  Play,
+  Sparkles,
+  Target,
+  TrendingUp,
+} from "lucide-react";
 
-import { GuestPrompt } from "@/components/guest-prompt";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedData } from "@/lib/use-authed-data";
 import { getSubjectIcon } from "@/lib/subject-icons";
@@ -27,6 +37,91 @@ function HomeSkeleton() {
 
 function StatNum({ children }: { children: React.ReactNode }) {
   return <span className="font-mono-stat text-xl font-semibold tracking-tight md:text-[22px]">{children}</span>;
+}
+
+// Контент для неавторизованного гостя — то, что видит поисковик и любой,
+// кто зашёл по ссылке впервые. Раньше здесь была одна кнопка входа (для
+// краулера это "тонкий" контент почти без ценности); теперь — реальное
+// описание того, что есть в сервисе. Цифры/статистика намеренно не
+// используются нигде здесь — только подтверждённые фичи, без выдумывания
+// показателей (тот же принцип, что и во всём остальном проекте).
+function GuestLanding() {
+  const { startLogin } = useAuth();
+
+  const features = [
+    {
+      icon: BookOpen,
+      title: "Банк заданий по темам",
+      description:
+        "Задания сгруппированы по темам и уровню сложности — можно тренироваться прицельно там, где сейчас слабее всего, а не решать всё подряд.",
+    },
+    {
+      icon: ClipboardCheck,
+      title: "Пробники ЕГЭ и ОГЭ",
+      description:
+        "Полноформатные пробные экзамены с разбором каждого задания после сдачи — понятно не только что не так, но и почему.",
+    },
+    {
+      icon: TrendingUp,
+      title: "Прогресс и слабые места",
+      description:
+        "Сервис сам показывает, какие темы и предметы просели по точности — план подготовки строится на реальных результатах, а не на ощущениях.",
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-10">
+      <section className="glass-panel relative overflow-hidden rounded-2xl p-8 text-center md:p-14">
+        <div className="pointer-events-none absolute -left-16 -top-16 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
+        <div
+          className="pointer-events-none absolute -bottom-16 -right-16 h-64 w-64 rounded-full opacity-20 blur-3xl"
+          style={{ backgroundColor: "var(--success)" }}
+        />
+        <div className="relative mx-auto flex max-w-2xl flex-col items-center gap-4">
+          <h1 className="text-3xl font-bold leading-tight md:text-4xl">
+            Готовься к ЕГЭ и ОГЭ по темам, а не наугад
+          </h1>
+          <p className="text-base text-muted-foreground md:text-lg">
+            Schooler — банк заданий с разбивкой по темам, пробные экзамены с разбором ответов и честное
+            отслеживание прогресса: видно, что уже освоено, а что нужно подтянуть.
+          </p>
+          <button
+            onClick={() => void startLogin()}
+            className="mt-2 flex items-center gap-2 rounded-xl bg-primary px-6 py-3.5 text-sm font-semibold text-primary-foreground shadow-[0_4px_20px_rgba(108,37,255,0.25)] transition-all hover:shadow-[0_10px_30px_rgba(108,37,255,0.35)] dark:shadow-[0_0_15px_rgba(108,37,255,0.4)]"
+          >
+            Войти через Telegram
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {features.map((f) => (
+          <div key={f.title} className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-6">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15 text-primary">
+              <f.icon className="h-5 w-5" />
+            </div>
+            <h3 className="text-base font-bold">{f.title}</h3>
+            <p className="text-sm text-muted-foreground">{f.description}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-card p-8 text-center">
+        <h2 className="text-xl font-bold">Готовы начать?</h2>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Вход только через Telegram — без паролей, регистраций и лишних форм.
+        </p>
+        <button
+          onClick={() => void startLogin()}
+          className="mt-1 flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground shadow-[0_4px_20px_rgba(108,37,255,0.25)] transition-all hover:shadow-[0_10px_30px_rgba(108,37,255,0.35)] dark:shadow-[0_0_15px_rgba(108,37,255,0.4)]"
+        >
+          Войти через Telegram
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </section>
+    </div>
+  );
 }
 
 function SubjectTaskRow({ item }: { item: SubjectSummaryItem }) {
@@ -79,11 +174,7 @@ export default function HomePage() {
   const { data: xp } = useAuthedData<XpSummaryResponse>("/api/xp/summary");
 
   if (!confirmed) {
-    return (
-      <div className="pt-4">
-        <GuestPrompt message="Войдите через Telegram, чтобы видеть свой прогресс и продолжать подготовку." />
-      </div>
-    );
+    return <GuestLanding />;
   }
 
   if (progressLoading || !progress) {
