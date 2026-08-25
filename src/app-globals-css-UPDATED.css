@@ -138,6 +138,19 @@
     clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
   }
 
+  /* Glassmorphism — по уточнённой версии DESIGN.md (страница профиля).
+     В светлой теме: полупрозрачный белый + блюр. В тёмной — непрозрачность
+     ниже и подложка темнее, иначе стекло на тёмном фоне выглядит грязно. */
+  .glass-panel {
+    background-color: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+  }
+  .dark .glass-panel {
+    background-color: rgba(24, 30, 38, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
   @keyframes stitch-pulse-glow {
     0% {
       box-shadow: 0 0 0 0 rgba(108, 37, 255, 0.4);
@@ -191,7 +204,7 @@
   .ml_wiris-formula,
   img[alt="Формула"] {
     display: inline-block;
-    max-height: 3em;
+    max-height: 1.6em;
     vertical-align: middle;
     margin: 0 0.15em;
     filter: brightness(0) saturate(100%) invert(var(--wiris-invert, 0));
