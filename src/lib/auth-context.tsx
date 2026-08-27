@@ -2,7 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 
-import { apiGet, apiGetAuth, apiPost, apiPostAuth, type AuthStartResponse, type SessionStatusResponse } from "@/lib/api";
+import {
+  apiGet,
+  apiGetAuth,
+  apiPost,
+  apiPostAuth,
+  type AuthStartResponse,
+  type SessionStatusResponse,
+} from "@/lib/api";
 
 const STORAGE_KEY = "schooler.session_token";
 
@@ -15,6 +22,8 @@ interface AuthContextValue {
   auth: AuthState;
   startLogin: () => Promise<void>;
   logout: () => Promise<void>;
+  /** Обменивает access_token от Supabase Auth (email/пароль) на нашу сессию. Возвращает true при успехе. */
+  loginWithSupabaseAccessToken: (accessToken: string) => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -120,7 +129,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuth({ status: "guest" });
   }, [auth]);
 
-  return <AuthContext.Provider value={{ auth, startLogin, logout }}>{children}</AuthContext.Provider>;
+  // ---- Вход по email/паролю через Supabase Auth ----
+  // Сам логин/регистрация происходят на стороне вызывающего компонента
+  // (через supabase.auth.signUp/signInWithPassword — см. email-auth-form.tsx),
+  // сюда прилетает уже готовый access_token Supabase-сессии. Мы меняем его
+  // на наш обычный session_token через бэкенд и дальше работаем с ним
+  // ровно так же, как после входа через Telegram/VK/Яндекс.
+  const loginWithSupabaseAccessToken = useCallback(
+    async (accessToken: string) => {
+      try {
+        const data = await apiPost<SessionStatusResponse>("/api/auth/supabase", {
+          access_token: accessToken,
+        });
+        if (data.session_token) {
+          return await confirmWithToken(data.session_token);
+        }
+      } catch (err) {
+        console.error("[auth] не удалось войти через Supabase:", err);
+      }
+      return false;
+    },
+    [confirmWithToken]
+  );
+
+  return (
+    <AuthContext.Provider value={{ auth, startLogin, logout, loginWithSupabaseAccessToken }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {
