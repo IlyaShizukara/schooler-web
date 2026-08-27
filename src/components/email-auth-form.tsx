@@ -40,7 +40,16 @@ export function EmailAuthForm() {
     setSubmitting(true);
     try {
       if (mode === "signup") {
-        const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            // Явно указываем адрес редиректа для письма-подтверждения —
+            // не полагаемся только на Site URL в дашборде Supabase (его
+            // легко забыть поменять с дефолтного localhost при переезде).
+            emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+          },
+        });
         if (signUpError) {
           setError(signUpError.message);
           return;
