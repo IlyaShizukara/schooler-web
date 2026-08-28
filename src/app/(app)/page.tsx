@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -15,7 +14,6 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-import { EmailAuthForm } from "@/components/email-auth-form";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedData } from "@/lib/use-authed-data";
 import { getSubjectIcon } from "@/lib/subject-icons";
@@ -49,7 +47,6 @@ function StatNum({ children }: { children: React.ReactNode }) {
 // показателей (тот же принцип, что и во всём остальном проекте).
 function GuestLanding() {
   const { startLogin } = useAuth();
-  const [showEmailForm, setShowEmailForm] = useState(false);
 
   const features = [
     {
@@ -95,17 +92,6 @@ function GuestLanding() {
             Войти через Telegram
             <ArrowRight className="h-4 w-4" />
           </button>
-
-          {showEmailForm ? (
-            <EmailAuthForm />
-          ) : (
-            <button
-              onClick={() => setShowEmailForm(true)}
-              className="text-xs font-semibold text-muted-foreground transition-colors hover:text-primary hover:underline"
-            >
-              Войти по email
-            </button>
-          )}
         </div>
       </section>
 
