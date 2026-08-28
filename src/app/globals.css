@@ -155,7 +155,6 @@
 
   mjx-container {
     color: var(--foreground) !important;
-    display: inline-block !important;
     white-space: nowrap !important;
     overflow-wrap: normal !important;
     word-break: normal !important;
@@ -165,10 +164,6 @@
     vertical-align: middle;
   }
 
-  mjx-container[display="true"] {
-    display: block !important;
-    margin: 0.75em 0;
-  }
 
   mjx-container,
   mjx-container * {
