@@ -30,7 +30,7 @@ function loadMathJax(): Promise<void> {
   // ($...$), и блочных ($$...$$) — независимо от их длины и вложенности.
   window.MathJax = {
     chtml: {
-      scale: 3,
+      scale: 1,
     },
   };
 
