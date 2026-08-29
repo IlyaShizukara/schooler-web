@@ -16,6 +16,7 @@ import {
   XCircle,
 } from "lucide-react";
 
+import { GuestBanner } from "@/components/guest-banner";
 import { MathContent } from "@/components/math-content";
 import { proxiedMediaUrl } from "@/lib/math-content";
 import { useAuth } from "@/lib/auth-context";
@@ -82,7 +83,11 @@ export default function ProbnikRunPage() {
     }
   }, [state, forceFinish]);
 
-  if (auth.status !== "confirmed" || state.phase === "idle") {
+  // Раньше здесь дополнительно проверялось auth.status !== "confirmed" —
+  // гость теперь тоже может иметь активный/завершённый пробник в state
+  // (см. probnik-run-context.tsx, ветка isGuest), так что единственная
+  // причина показать пустой экран — реально отсутствующий прогон.
+  if (state.phase === "idle") {
     return (
       <div className="flex flex-col items-center gap-3 py-24 text-center">
         <p className="text-sm text-muted-foreground">Активный пробник не найден.</p>
@@ -108,7 +113,7 @@ export default function ProbnikRunPage() {
 
   /* ============ РАЗБОР РЕЗУЛЬТАТОВ ============ */
   if (state.phase === "review") {
-    const { review } = state;
+    const { review, isGuest, note } = state;
     const rt: ProbnikReviewTask = review.tasks[state.currentIndex];
     const big = review.percent >= 70 ? "var(--success)" : review.percent >= 40 ? "var(--warning)" : "var(--destructive)";
 
@@ -137,18 +142,29 @@ export default function ProbnikRunPage() {
           <Trophy className="h-10 w-10" style={{ color: big }} />
           <div>
             <div className="font-mono-stat text-5xl font-semibold" style={{ color: big }}>
-              {review.secondary_score ?? review.percent}
-              <span className="text-2xl text-muted-foreground"> / 100</span>
+              {review.secondary_score ?? `${review.percent}%`}
+              {review.secondary_score != null && <span className="text-2xl text-muted-foreground"> / 100</span>}
             </div>
             {review.math_basic_grade != null && (
               <p className="mt-1 text-lg font-bold" style={{ color: big }}>
                 Оценка: {review.math_basic_grade}
               </p>
             )}
+            {isGuest && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {part2Max > 0 ? "По части 1 — часть 2 в баллы не входит, см. ниже" : "По части 1"}
+              </p>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
-            Верно {review.earned_points} из {review.total_points} баллов
+            Верно {review.earned_points} из {review.total_points} баллов{isGuest && part2Max > 0 ? " (часть 1)" : ""}
           </p>
+
+          {isGuest && note && (
+            <div className="w-full rounded-xl border border-primary/20 bg-primary/5 p-4 text-left text-sm text-muted-foreground">
+              {note}
+            </div>
+          )}
 
           <div className="grid w-full grid-cols-2 gap-4 border-t border-border pt-5 sm:grid-cols-3">
             <div>
@@ -163,18 +179,22 @@ export default function ProbnikRunPage() {
             </div>
             <div className="col-span-2 sm:col-span-1">
               <div className="font-mono-stat text-lg font-semibold">
-                {part2Max > 0 ? `${part2Earned}/${part2Max}` : "—"}
+                {part2Max === 0 ? "—" : isGuest ? "После входа" : `${part2Earned}/${part2Max}`}
               </div>
               <div className="text-xs text-muted-foreground">Часть 2 баллы</div>
             </div>
           </div>
 
-          <button
-            onClick={backToForm}
-            className="mt-2 w-full max-w-xs rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground sm:w-auto sm:px-10"
-          >
-            Готово
-          </button>
+          {isGuest ? (
+            <GuestBanner message="Войди, чтобы получить баллы по части 2, официальный вторичный балл и сохранить историю пробников." />
+          ) : (
+            <button
+              onClick={backToForm}
+              className="mt-2 w-full max-w-xs rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground sm:w-auto sm:px-10"
+            >
+              Готово
+            </button>
+          )}
         </section>
 
         {/* ---- детализация: таблица ответов ---- */}
@@ -218,7 +238,9 @@ export default function ProbnikRunPage() {
                     </span>
                   )}
                   {status === "pending" && (
-                    <span className="rounded-full bg-warning/15 px-2 py-1 text-xs font-bold text-warning">Оценить</span>
+                    <span className="rounded-full bg-warning/15 px-2 py-1 text-xs font-bold text-warning">
+                      {isGuest ? "После входа" : "Оценить"}
+                    </span>
                   )}
                 </button>
               );
@@ -274,20 +296,29 @@ export default function ProbnikRunPage() {
                   <MathContent text={rt.explanation} className="text-sm" />
                 </div>
               )}
-              <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
-                <p className="mb-3 text-sm font-semibold">Сколько баллов вы себе ставите (макс. {rt.points})?</p>
-                <div className="flex items-center gap-2.5">
-                  <input
-                    value={draftValue}
-                    onChange={(e) => setGradeDraft(rt.id, e.target.value)}
-                    placeholder={`0–${rt.points}`}
-                    className="w-24 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
-                  />
-                  <button onClick={saveGrade} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
-                    Сохранить
-                  </button>
+              {isGuest ? (
+                <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
+                  <p className="mb-3 text-sm font-semibold">
+                    Самооценка части 2 доступна после входа — сохранится вместе с остальным прогрессом.
+                  </p>
+                  <GuestBanner message="Войти, чтобы оценить это задание и сохранить результат." />
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-lg border border-primary/25 bg-primary/5 p-4">
+                  <p className="mb-3 text-sm font-semibold">Сколько баллов вы себе ставите (макс. {rt.points})?</p>
+                  <div className="flex items-center gap-2.5">
+                    <input
+                      value={draftValue}
+                      onChange={(e) => setGradeDraft(rt.id, e.target.value)}
+                      placeholder={`0–${rt.points}`}
+                      className="w-24 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+                    />
+                    <button onClick={saveGrade} className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground">
+                      Сохранить
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </section>
@@ -323,6 +354,9 @@ export default function ProbnikRunPage() {
             {formatRemaining(state.deadline)}
           </div>
         </div>
+        {state.isGuest && (
+          <p className="mb-3 text-xs text-muted-foreground">Результат не сохранится — вы не вошли в аккаунт.</p>
+        )}
         <div className="grid grid-cols-6 gap-2 lg:grid-cols-4">
           {state.tasks.map((t, i) => (
             <NavPill key={t.id} label={String(t.task_number ?? i + 1)} state={pillState(i)} onClick={() => jumpTo(i)} />
@@ -381,7 +415,7 @@ export default function ProbnikRunPage() {
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
               <p className="text-sm">
                 Решите это задание на бумаге. После сдачи пробника нужно будет самостоятельно проверить его по
-                критериям и выставить себе баллы.
+                критериям{state.isGuest ? "" : " и выставить себе баллы"}.
               </p>
             </div>
             <button

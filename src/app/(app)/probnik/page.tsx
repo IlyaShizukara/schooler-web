@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Rocket, School, TrendingDown, AlertTriangle, Timer as TimerIcon, Sparkles } from "lucide-react";
 
-import { GuestPrompt } from "@/components/guest-prompt";
+import { GuestBanner } from "@/components/guest-banner";
 import { SubjectsSkeleton } from "@/components/subjects-skeleton";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedData } from "@/lib/use-authed-data";
-import { apiGetAuth } from "@/lib/api";
+import { usePublicData } from "@/lib/use-public-data";
+import { apiGet, apiGetAuth } from "@/lib/api";
 import { getSubjectIcon } from "@/lib/subject-icons";
 import { useProbnikRun } from "@/lib/probnik-run-context";
 import { EXAM_TASK_COUNTS, TIME_OPTIONS, formatDurationShort } from "@/lib/probnik-constants";
@@ -23,7 +24,9 @@ export default function ProbnikGeneratorPage() {
   const confirmed = auth.status === "confirmed";
   const { start, hint } = useProbnikRun();
 
-  const { data: subjects, loading: subjectsLoading } = useAuthedData<SubjectSummaryItem[]>("/api/subjects");
+  // Банк заданий (и темы для режима "topic") открыт и гостю.
+  const { data: subjects, loading: subjectsLoading } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
+  // Прогресс/слабые места — честно приватны, у гостя их просто нет.
   const { data: progress } = useAuthedData<ProgressSummaryResponse>("/api/progress/summary");
 
   const [subjectSlug, setSubjectSlug] = useState<string | null>(null);
@@ -45,11 +48,17 @@ export default function ProbnikGeneratorPage() {
   }, [subjects, subjectSlug]);
 
   useEffect(() => {
-    if (examKind !== "topic" || !subjectSlug || auth.status !== "confirmed") return;
+    // Раньше здесь был auth.status !== "confirmed" в условии выхода —
+    // темы предмета теперь открыты и гостю (content.py::list_topics).
+    if (examKind !== "topic" || !subjectSlug) return;
     let cancelled = false;
     setTopicsLoading(true);
     setTopics(null);
-    apiGetAuth<TopicItem[]>(`/api/subjects/${subjectSlug}/topics`, auth.token)
+    const request =
+      auth.status === "confirmed"
+        ? apiGetAuth<TopicItem[]>(`/api/subjects/${subjectSlug}/topics`, auth.token)
+        : apiGet<TopicItem[]>(`/api/subjects/${subjectSlug}/topics`);
+    request
       .then((data) => {
         if (!cancelled) setTopics(data);
       })
@@ -87,6 +96,8 @@ export default function ProbnikGeneratorPage() {
       task_count: examKind === "topic" ? taskCount : null,
     };
     try {
+      // start() из контекста сам решает /start или /guest/start в
+      // зависимости от auth.status — этой странице не нужно об этом знать.
       await start(payload, examKind === "topic" ? TIME_OPTIONS[2] : time);
       router.push("/probnik/run");
     } catch {
@@ -94,18 +105,6 @@ export default function ProbnikGeneratorPage() {
     } finally {
       setStarting(false);
     }
-  }
-
-  if (!confirmed) {
-    return (
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-3xl font-extrabold">Генерация пробника</h1>
-          <p className="text-muted-foreground">Настройте параметры экзамена для максимальной эффективности.</p>
-        </div>
-        <GuestPrompt message="Войдите через Telegram, чтобы запускать пробники." />
-      </div>
-    );
   }
 
   if (subjectsLoading || !subjects) {
@@ -128,6 +127,10 @@ export default function ProbnikGeneratorPage() {
         <h1 className="text-3xl font-extrabold">Генерация пробника</h1>
         <p className="text-muted-foreground">Настройте параметры экзамена для максимальной эффективности.</p>
       </div>
+
+      {!confirmed && (
+        <GuestBanner message="Можно пройти пробник без входа. Часть 1 проверяется как обычно, но результат нигде не сохранится, а часть 2 — только для самопроверки, без баллов." />
+      )}
 
       {hint && (
         <div className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted-foreground">
@@ -272,7 +275,9 @@ export default function ProbnikGeneratorPage() {
               <p className="mb-1 text-sm text-muted-foreground">
                 Основываясь на ваших результатах, рекомендую сфокусироваться на:
               </p>
-              {weakSpots.length === 0 ? (
+              {!confirmed ? (
+                <p className="text-sm text-muted-foreground">Доступно после входа — нужна история решённых заданий.</p>
+              ) : weakSpots.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   Пока недостаточно попыток, чтобы выделить слабые места.
                 </p>

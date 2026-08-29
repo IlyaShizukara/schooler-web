@@ -7,10 +7,11 @@ import { ArrowLeft, ArrowRight, ChevronRight, Flame, PlayCircle, RotateCcw, Shuf
 
 import { IconBadge } from "@/components/icon-badge";
 import { ProgressBar } from "@/components/progress-bar";
-import { GuestPrompt } from "@/components/guest-prompt";
+import { GuestBanner } from "@/components/guest-banner";
 import { TopicsSkeleton } from "@/components/topics-skeleton";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedData } from "@/lib/use-authed-data";
+import { usePublicData } from "@/lib/use-public-data";
 import { getSubjectIcon } from "@/lib/subject-icons";
 import { pointsWord } from "@/lib/pluralize";
 import { DIFFICULTY_COLOR } from "@/lib/difficulty";
@@ -150,8 +151,12 @@ export default function SubjectTopicsPage() {
   const confirmed = auth.status === "confirmed";
   const [filter, setFilter] = useState<FilterKey>("all");
 
-  const { data: subjects } = useAuthedData<SubjectSummaryItem[]>("/api/subjects");
-  const { data: topics, loading } = useAuthedData<TopicItem[]>(`/api/subjects/${slug}/topics`);
+  // Банк заданий открыт и гостю — usePublicData всегда идёт в сеть.
+  const { data: subjects } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
+  const { data: topics, loading } = usePublicData<TopicItem[]>(`/api/subjects/${slug}/topics`);
+  // Профиль и история пробников — честно приватные, для гостя useAuthedData
+  // корректно вернёт null без похода в сеть, а весь рендер ниже уже готов
+  // к null через опциональную цепочку (?.).
   const { data: profile } = useAuthedData<ProfileResponse>("/api/profile");
   const { data: probnikHistory } = useAuthedData<ProbnikHistoryItem[]>("/api/probnik/history");
 
@@ -171,15 +176,6 @@ export default function SubjectTopicsPage() {
       <h1 className="text-lg font-bold">{subjectName}</h1>
     </div>
   );
-
-  if (!confirmed) {
-    return (
-      <div className="flex flex-col gap-6">
-        {header}
-        <GuestPrompt message="Войдите через Telegram, чтобы видеть свой прогресс по темам и решать задания." />
-      </div>
-    );
-  }
 
   if (loading || !topics) {
     return (
@@ -204,6 +200,10 @@ export default function SubjectTopicsPage() {
   return (
     <div className="flex flex-col gap-6">
       {header}
+
+      {!confirmed && (
+        <GuestBanner message="Можно решать задания без входа, но прогресс и слабые темы не сохраняются." />
+      )}
 
       <div className="glass-panel relative overflow-hidden rounded-2xl p-6">
         <div

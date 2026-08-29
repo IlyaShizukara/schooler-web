@@ -4,10 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Play } from "lucide-react";
 
-import { GuestPrompt } from "@/components/guest-prompt";
+import { GuestBanner } from "@/components/guest-banner";
 import { SubjectsSkeleton } from "@/components/subjects-skeleton";
 import { useAuth } from "@/lib/auth-context";
-import { useAuthedData } from "@/lib/use-authed-data";
+import { usePublicData } from "@/lib/use-public-data";
 import { getSubjectIcon } from "@/lib/subject-icons";
 import type { SubjectSummaryItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -110,7 +110,9 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 export default function SubjectsPage() {
   const { auth } = useAuth();
   const confirmed = auth.status === "confirmed";
-  const { data: subjects, loading } = useAuthedData<SubjectSummaryItem[]>("/api/subjects");
+  // usePublicData вместо useAuthedData — гость тоже должен получить список
+  // предметов (просто с solved=0/accuracy=0 по всем, это гарантирует бэкенд).
+  const { data: subjects, loading } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const header = (
@@ -119,15 +121,6 @@ export default function SubjectsPage() {
       <p className="text-sm text-muted-foreground md:text-base">Выберите предмет, чтобы продолжить подготовку</p>
     </div>
   );
-
-  if (!confirmed) {
-    return (
-      <div className="flex flex-col gap-6">
-        {header}
-        <GuestPrompt message="Войдите через Telegram, чтобы видеть свой прогресс по предметам и решать задания." />
-      </div>
-    );
-  }
 
   if (loading || !subjects) {
     return (
@@ -146,6 +139,10 @@ export default function SubjectsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {!confirmed && (
+        <GuestBanner message="Можно решать задания без входа, но прогресс не сохраняется. Войди, чтобы видеть точность и слабые места по каждому предмету." />
+      )}
+
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-end">
         {header}
         <div className="flex flex-wrap gap-2">

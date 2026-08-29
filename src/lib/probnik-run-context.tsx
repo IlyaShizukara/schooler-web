@@ -2,17 +2,40 @@
 
 import { createContext, useCallback, useContext, useRef, useState } from "react";
 
-import { apiGetAuth, apiPostAuth } from "@/lib/api";
+import { apiGetAuth, apiPost, apiPostAuth } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { parseProbnikTime } from "@/lib/probnik-constants";
 import type {
   ProbnikAnswerPayload,
   ProbnikReviewResponse,
+  ProbnikReviewTask,
   ProbnikStartPayload,
   ProbnikStartResponse,
   ProbnikTask,
   SelfGradeResponse,
 } from "@/lib/api";
+
+// ──────────────────────────────────────────────────────────────────────────
+// Гостевые типы ответа — зеркалят ProbnikGuestStartOut/ProbnikGuestGradeOut
+// из probnik.py. Не заведены в api.ts вместе с остальными Probnik*-типами
+// только потому, что я не видел этот файл целиком при правке — стоит потом
+// перенести туда для единообразия.
+// ──────────────────────────────────────────────────────────────────────────
+interface ProbnikGuestStartResponse {
+  subject_slug: string;
+  subject_name: string;
+  tasks: ProbnikTask[];
+  total_points: number;
+}
+
+interface ProbnikGuestGradeResponse {
+  subject_name: string;
+  tasks: ProbnikReviewTask[];
+  total_points: number;
+  earned_points: number;
+  percent: number;
+  note: string;
+}
 
 interface AnswerSlot {
   selectedIndex: number | null;
@@ -23,7 +46,9 @@ type RunState =
   | { phase: "idle" }
   | {
       phase: "active";
-      sessionId: string;
+      isGuest: boolean;
+      sessionId: string; // у гостя нет реальной сессии на бэкенде — placeholder "guest", нигде в сеть не уходит
+      subjectSlug: string;
       subjectName: string;
       tasks: ProbnikTask[];
       currentIndex: number;
@@ -38,11 +63,14 @@ type RunState =
   | { phase: "finishing"; sessionId: string; subjectName: string }
   | {
       phase: "review";
+      isGuest: boolean;
       sessionId: string;
       review: ProbnikReviewResponse;
       currentIndex: number;
       gradeDraft: Record<number, string>;
       elapsedSeconds: number;
+      /** Только у гостя — почему баллы неполные (часть 2 не учтена, ничего не сохранено). */
+      note?: string;
     };
 
 interface ProbnikRunContextValue {
@@ -64,6 +92,8 @@ interface ProbnikRunContextValue {
 
 const ProbnikRunContext = createContext<ProbnikRunContextValue | null>(null);
 
+type ActiveState = Extract<RunState, { phase: "active" }>;
+
 export function ProbnikRunProvider({ children }: { children: React.ReactNode }) {
   const { auth } = useAuth();
   const [state, setState] = useState<RunState>({ phase: "idle" });
@@ -76,42 +106,107 @@ export function ProbnikRunProvider({ children }: { children: React.ReactNode }) 
     hintTimer.current = setTimeout(() => setHintState(null), 3000);
   }, []);
 
+  // Собирает пакет ответов для /guest/grade из ВСЕХ заданий пробника, а не
+  // только отвеченных — иначе total_points на бэкенде посчитается только по
+  // тому, что гость успел отправить, и досрочное завершение выглядело бы
+  // как 100% вместо честного результата с недорешёнными = неверными.
+  const buildGuestAnswers = useCallback((activeState: ActiveState) => {
+    return activeState.tasks.map((t, idx) => {
+      const slot = activeState.answers[idx];
+      return {
+        task_id: t.id,
+        selected_index: slot?.selectedIndex ?? undefined,
+        answer_text: slot?.answerText || undefined,
+      };
+    });
+  }, []);
+
   const finishSession = useCallback(
-    async (sessionId: string, subjectName: string, elapsedSeconds: number) => {
-      if (auth.status !== "confirmed") return;
+    async (activeState: ActiveState, elapsedSeconds: number) => {
+      const { sessionId, subjectName, subjectSlug, isGuest, tasks, answers } = activeState;
       setState({ phase: "finishing", sessionId, subjectName });
       try {
-        await apiPostAuth(`/api/probnik/${sessionId}/finish`, auth.token);
-        const review = await apiGetAuth<ProbnikReviewResponse>(`/api/probnik/${sessionId}/review`, auth.token);
-        setState({ phase: "review", sessionId, review, currentIndex: 0, gradeDraft: {}, elapsedSeconds });
+        if (isGuest) {
+          const data = await apiPost<ProbnikGuestGradeResponse>("/api/probnik/guest/grade", {
+            subject_slug: subjectSlug,
+            answers: buildGuestAnswers(activeState),
+          });
+          const review: ProbnikReviewResponse = {
+            subject_name: data.subject_name,
+            tasks: data.tasks,
+            total_points: data.total_points,
+            earned_points: data.earned_points,
+            percent: data.percent,
+            secondary_score: null,
+            math_basic_grade: null,
+          };
+          setState({
+            phase: "review",
+            isGuest: true,
+            sessionId: "guest",
+            review,
+            currentIndex: 0,
+            gradeDraft: {},
+            elapsedSeconds,
+            note: data.note,
+          });
+        } else {
+          if (auth.status !== "confirmed") return;
+          await apiPostAuth(`/api/probnik/${sessionId}/finish`, auth.token);
+          const review = await apiGetAuth<ProbnikReviewResponse>(`/api/probnik/${sessionId}/review`, auth.token);
+          setState({ phase: "review", isGuest: false, sessionId, review, currentIndex: 0, gradeDraft: {}, elapsedSeconds });
+        }
       } catch (err) {
         console.error("[probnik] не удалось завершить пробник:", err);
         showHint("Не удалось подвести итог пробника — проверьте соединение");
       }
     },
-    [auth, showHint]
+    [auth, showHint, buildGuestAnswers]
   );
 
   const start = useCallback(
     async (payload: ProbnikStartPayload, durationLabel: string) => {
-      if (auth.status !== "confirmed") return;
+      const isGuest = auth.status !== "confirmed";
+      const durationSeconds = parseProbnikTime(durationLabel);
       try {
-        const data = await apiPostAuth<ProbnikStartResponse>("/api/probnik/start", auth.token, payload);
-        const durationSeconds = parseProbnikTime(durationLabel);
-        setState({
-          phase: "active",
-          sessionId: data.session_id,
-          subjectName: data.subject_name,
-          tasks: data.tasks,
-          currentIndex: 0,
-          selectedIndex: null,
-          answerText: "",
-          answeredIndices: new Set(),
-          flaggedIndices: new Set(),
-          answers: {},
-          deadline: Date.now() + durationSeconds * 1000,
-          durationSeconds,
-        });
+        if (isGuest) {
+          const data = await apiPost<ProbnikGuestStartResponse>("/api/probnik/guest/start", payload);
+          setState({
+            phase: "active",
+            isGuest: true,
+            sessionId: "guest",
+            subjectSlug: data.subject_slug,
+            subjectName: data.subject_name,
+            tasks: data.tasks,
+            currentIndex: 0,
+            selectedIndex: null,
+            answerText: "",
+            answeredIndices: new Set(),
+            flaggedIndices: new Set(),
+            answers: {},
+            deadline: Date.now() + durationSeconds * 1000,
+            durationSeconds,
+          });
+        } else {
+          if (auth.status !== "confirmed") return;
+          const data = await apiPostAuth<ProbnikStartResponse>("/api/probnik/start", auth.token, payload);
+          setState({
+            phase: "active",
+            isGuest: false,
+            sessionId: data.session_id,
+            subjectSlug: payload.subject_slug,
+            subjectName: data.subject_name,
+            tasks: data.tasks,
+            currentIndex: 0,
+            selectedIndex: null,
+            answerText: "",
+            answeredIndices: new Set(),
+            flaggedIndices: new Set(),
+            answers: {},
+            deadline: Date.now() + durationSeconds * 1000,
+            durationSeconds,
+          });
+        }
       } catch (err) {
         console.error("[probnik] не удалось запустить пробник:", err);
         showHint("Не удалось начать пробник — проверьте соединение и попробуйте ещё раз");
@@ -130,7 +225,7 @@ export function ProbnikRunProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const submitAnswer = useCallback(async () => {
-    if (state.phase !== "active" || auth.status !== "confirmed") return;
+    if (state.phase !== "active") return;
     const task = state.tasks[state.currentIndex];
     const payload: ProbnikAnswerPayload = { task_id: task.id };
     if (task.task_type === "mcq") {
@@ -147,28 +242,37 @@ export function ProbnikRunProvider({ children }: { children: React.ReactNode }) 
       payload.answer_text = state.answerText;
     }
 
-    try {
-      await apiPostAuth(`/api/probnik/${state.sessionId}/answer`, auth.token, payload);
-      setState((prev) => {
-        if (prev.phase !== "active") return prev;
-        const nextAnswered = new Set(prev.answeredIndices);
-        nextAnswered.add(prev.currentIndex);
-        return {
-          ...prev,
-          answeredIndices: nextAnswered,
-          answers: {
-            ...prev.answers,
-            [prev.currentIndex]: { selectedIndex: prev.selectedIndex, answerText: prev.answerText },
-          },
-        };
-      });
-    } catch (err) {
-      console.error("[probnik] не удалось отправить ответ:", err);
-      showHint("Не удалось отправить ответ — проверьте соединение и попробуйте ещё раз");
+    // У гостя нет сохранённой сессии на бэкенде — ответ по каждому вопросу
+    // никуда не отправляется по ходу прохождения, только копится локально
+    // (answers ниже) и уходит одним пакетом на /guest/grade в конце. Для
+    // залогиненного поведение не изменилось: сохраняем сразу же.
+    if (!state.isGuest) {
+      if (auth.status !== "confirmed") return;
+      try {
+        await apiPostAuth(`/api/probnik/${state.sessionId}/answer`, auth.token, payload);
+      } catch (err) {
+        console.error("[probnik] не удалось отправить ответ:", err);
+        showHint("Не удалось отправить ответ — проверьте соединение и попробуйте ещё раз");
+        return;
+      }
     }
+
+    setState((prev) => {
+      if (prev.phase !== "active") return prev;
+      const nextAnswered = new Set(prev.answeredIndices);
+      nextAnswered.add(prev.currentIndex);
+      return {
+        ...prev,
+        answeredIndices: nextAnswered,
+        answers: {
+          ...prev.answers,
+          [prev.currentIndex]: { selectedIndex: prev.selectedIndex, answerText: prev.answerText },
+        },
+      };
+    });
   }, [state, auth, showHint]);
 
-  const goToIndex = useCallback((prev: Extract<RunState, { phase: "active" }>, index: number): RunState => {
+  const goToIndex = useCallback((prev: ActiveState, index: number): RunState => {
     const slot = prev.answers[index];
     return {
       ...prev,
@@ -178,7 +282,7 @@ export function ProbnikRunProvider({ children }: { children: React.ReactNode }) 
     };
   }, []);
 
-  const elapsedFor = useCallback((prev: Extract<RunState, { phase: "active" }>): number => {
+  const elapsedFor = useCallback((prev: ActiveState): number => {
     const remaining = Math.max(0, Math.round((prev.deadline - Date.now()) / 1000));
     return Math.max(0, prev.durationSeconds - remaining);
   }, []);
@@ -186,7 +290,7 @@ export function ProbnikRunProvider({ children }: { children: React.ReactNode }) 
   const goNext = useCallback(async () => {
     if (state.phase !== "active") return;
     const currentTask = state.tasks[state.currentIndex];
-    let markedState = state;
+    let markedState: ActiveState = state;
     if (currentTask.part === 2) {
       const nextAnswered = new Set(state.answeredIndices);
       nextAnswered.add(state.currentIndex);
@@ -195,7 +299,7 @@ export function ProbnikRunProvider({ children }: { children: React.ReactNode }) 
     }
     const nextIndex = state.currentIndex + 1;
     if (nextIndex >= state.tasks.length) {
-      await finishSession(state.sessionId, state.subjectName, elapsedFor(markedState));
+      await finishSession(markedState, elapsedFor(markedState));
     } else {
       setState((prev) => (prev.phase === "active" ? goToIndex(prev, nextIndex) : prev));
     }
@@ -227,7 +331,7 @@ export function ProbnikRunProvider({ children }: { children: React.ReactNode }) 
 
   const forceFinish = useCallback(async () => {
     if (state.phase !== "active") return;
-    await finishSession(state.sessionId, state.subjectName, elapsedFor(state));
+    await finishSession(state, elapsedFor(state));
   }, [state, finishSession, elapsedFor]);
 
   const jumpReview = useCallback((index: number) => {
@@ -246,7 +350,17 @@ export function ProbnikRunProvider({ children }: { children: React.ReactNode }) 
 
   const submitSelfGrade = useCallback(
     async (taskId: number, points: number) => {
-      if (state.phase !== "review" || auth.status !== "confirmed") return;
+      if (state.phase !== "review") return;
+
+      // Самооценка части 2 требует сохранённой сессии (ProbnikPart2Grade
+      // в БД, привязанный к exam_session_id) — у гостя её нет и предложить
+      // сохранить некуда, честно объясняем вместо тихого no-op.
+      if (state.isGuest) {
+        showHint("Самооценка части 2 доступна после входа через Telegram");
+        return;
+      }
+      if (auth.status !== "confirmed") return;
+
       try {
         const result = await apiPostAuth<SelfGradeResponse>(
           `/api/probnik/${state.sessionId}/self-grade`,

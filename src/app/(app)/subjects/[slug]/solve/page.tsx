@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, Download, Eye, Info, Paperclip, SkipForward, XCircle } from "lucide-react";
 
-import { GuestPrompt } from "@/components/guest-prompt";
+import { GuestBanner } from "@/components/guest-banner";
 import { MathContent } from "@/components/math-content";
 import { useAuth } from "@/lib/auth-context";
-import { useAuthedData } from "@/lib/use-authed-data";
-import { apiGetAuth, apiPostAuth } from "@/lib/api";
+import { usePublicData } from "@/lib/use-public-data";
+import { apiGet, apiGetAuth, apiPost, apiPostAuth } from "@/lib/api";
 import { proxiedMediaUrl } from "@/lib/math-content";
 import type { AnswerResult, SubjectSummaryItem, TaskResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -42,7 +42,8 @@ export default function SolveTaskPage() {
   const { auth } = useAuth();
   const confirmed = auth.status === "confirmed";
 
-  const { data: subjects } = useAuthedData<SubjectSummaryItem[]>("/api/subjects");
+  // Банк заданий открыт и гостю — usePublicData всегда идёт в сеть.
+  const { data: subjects } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
   const subjectName = subjects?.find((s) => s.slug === params.slug)?.name ?? params.slug;
 
   const [task, setTask] = useState<TaskResponse | null>(null);
@@ -55,7 +56,9 @@ export default function SolveTaskPage() {
   const [submitting, setSubmitting] = useState(false);
 
   async function fetchNextTask() {
-    if (auth.status !== "confirmed") return;
+    // Раньше здесь был ранний return для гостя — next-task теперь открыт
+    // всем (см. content.py::next_task, get_current_user_optional), гость
+    // просто не получает исключение "уже решённых" заданий из выборки.
     setTaskLoading(true);
     setTask(null);
     setSelectedIndex(null);
@@ -66,7 +69,10 @@ export default function SolveTaskPage() {
 
     const path = `/api/subjects/${params.slug}/next-task${topicParam !== null ? `?topic_id=${topicParam}` : ""}`;
     try {
-      const data = await apiGetAuth<TaskResponse>(path, auth.token);
+      const data =
+        auth.status === "confirmed"
+          ? await apiGetAuth<TaskResponse>(path, auth.token)
+          : await apiGet<TaskResponse>(path);
       setTask(data);
     } catch (err) {
       console.error("[solve] не удалось получить задание:", err);
@@ -86,7 +92,7 @@ export default function SolveTaskPage() {
   }
 
   async function submitAnswer() {
-    if (!task || auth.status !== "confirmed") return;
+    if (!task) return;
     const payload: { selected_index?: number; answer_text?: string } = {};
     if (task.task_type === "mcq") {
       if (selectedIndex === null) {
@@ -104,7 +110,12 @@ export default function SolveTaskPage() {
 
     setSubmitting(true);
     try {
-      const data = await apiPostAuth<AnswerResult>(`/api/tasks/${task.id}/answer`, auth.token, payload);
+      // Гость тоже получает проверку ответа (см. content.py::submit_answer) —
+      // просто ничего не сохраняется на бэкенде (нет Attempt, нет XP).
+      const data =
+        auth.status === "confirmed"
+          ? await apiPostAuth<AnswerResult>(`/api/tasks/${task.id}/answer`, auth.token, payload)
+          : await apiPost<AnswerResult>(`/api/tasks/${task.id}/answer`, payload);
       setResult(data);
     } catch (err) {
       console.error("[solve] не удалось отправить ответ:", err);
@@ -126,15 +137,6 @@ export default function SolveTaskPage() {
     </div>
   );
 
-  if (!confirmed) {
-    return (
-      <div className="flex flex-col gap-6">
-        {header}
-        <GuestPrompt message="Войдите через Telegram, чтобы решать задания." />
-      </div>
-    );
-  }
-
   if (taskLoading || task === null) {
     return (
       <div className="flex flex-col gap-6">
@@ -153,6 +155,10 @@ export default function SolveTaskPage() {
   return (
     <div className="flex flex-col gap-6">
       {header}
+
+      {!confirmed && (
+        <GuestBanner message="Ответ проверяется как обычно, но результат нигде не сохранится." />
+      )}
 
       <div className="glass-panel relative overflow-hidden rounded-2xl p-6">
         <div className="relative mb-4 flex flex-wrap gap-2">
