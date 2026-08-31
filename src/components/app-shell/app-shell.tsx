@@ -7,7 +7,9 @@ import { Topbar } from "@/components/app-shell/topbar";
 import { MobileTopbar } from "@/components/app-shell/mobile-topbar";
 import { BottomNav } from "@/components/app-shell/bottom-nav";
 import { AiFab } from "@/components/app-shell/ai-fab";
+import { AiChatPanel } from "@/components/ai-chat-panel";
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
+import { AiChatProvider } from "@/lib/ai-chat-context";
 import { ProfileProvider } from "@/lib/profile-context";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedData } from "@/lib/use-authed-data";
@@ -32,18 +34,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <ProfileProvider>
-      <div className="min-h-screen bg-page-bg">
-        <Sidebar />
-        <Topbar />
-        <MobileTopbar />
+      <AiChatProvider>
+        <div className="min-h-screen bg-page-bg">
+          <Sidebar />
+          <Topbar />
+          <MobileTopbar />
 
-        <main className="min-h-screen px-4 pb-24 pt-[76px] md:ml-64 md:px-8 md:pb-10 md:pt-24">
-          <div className="mx-auto w-full max-w-[1200px]">{children}</div>
-        </main>
+          <main className="min-h-screen px-4 pb-24 pt-[76px] md:ml-64 md:px-8 md:pb-10 md:pt-24">
+            <div className="mx-auto w-full max-w-[1200px]">{children}</div>
+          </main>
 
-        <AiFab />
-        <BottomNav />
-      </div>
+          <AiFab />
+          <BottomNav />
+          <AiChatPanel />
+        </div>
+      </AiChatProvider>
     </ProfileProvider>
   );
 }

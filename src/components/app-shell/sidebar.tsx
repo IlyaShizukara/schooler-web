@@ -7,14 +7,17 @@ import { Bot, Settings } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/nav-items";
 import { useAuth } from "@/lib/auth-context";
 import { useProfile } from "@/lib/profile-context";
+import { useAiChat } from "@/lib/ai-chat-context";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { auth } = useAuth();
+  const { auth, startLogin } = useAuth();
   const { profile } = useProfile();
+  const { openChat } = useAiChat();
 
-  const displayName = auth.status === "confirmed" ? auth.name ?? "Ученик" : "Гость";
+  const confirmed = auth.status === "confirmed";
+  const displayName = confirmed ? auth.name ?? "Ученик" : "Гость";
   const metaLine = profile
     ? [profile.exam_type, profile.grade ? `${profile.grade} класс` : null].filter(Boolean).join(" · ")
     : "";
@@ -56,7 +59,12 @@ export function Sidebar() {
           </div>
           <div>
             <p className="text-xs font-bold">ИИ-репетитор</p>
-            <button className="text-xs font-bold text-primary hover:underline">Скоро</button>
+            <button
+              onClick={() => (confirmed ? openChat() : void startLogin())}
+              className="text-xs font-bold text-primary hover:underline"
+            >
+              {confirmed ? "Открыть чат" : "Войти, чтобы открыть"}
+            </button>
           </div>
         </div>
 

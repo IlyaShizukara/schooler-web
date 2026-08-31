@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Download, Eye, Info, Paperclip, SkipForward, XCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bot, Check, CheckCircle2, Download, Eye, Info, Paperclip, SkipForward, XCircle } from "lucide-react";
 
 import { GuestBanner } from "@/components/guest-banner";
 import { MathContent } from "@/components/math-content";
 import { useAuth } from "@/lib/auth-context";
+import { useAiChat } from "@/lib/ai-chat-context";
 import { usePublicData } from "@/lib/use-public-data";
 import { apiGet, apiGetAuth, apiPost, apiPostAuth } from "@/lib/api";
 import { proxiedMediaUrl } from "@/lib/math-content";
@@ -41,6 +42,7 @@ export default function SolveTaskPage() {
 
   const { auth } = useAuth();
   const confirmed = auth.status === "confirmed";
+  const { openChat } = useAiChat();
 
   // Банк заданий открыт и гостю — usePublicData всегда идёт в сеть.
   const { data: subjects } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
@@ -315,6 +317,15 @@ export default function SolveTaskPage() {
             )}
             {result.explanation && <MathContent text={result.explanation} className="text-base leading-relaxed" />}
           </div>
+          {confirmed && !result.is_correct && (
+            <button
+              onClick={() => openChat(currentTask.id)}
+              className="flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
+            >
+              <Bot className="h-4 w-4" />
+              Объяснить с ИИ-репетитором
+            </button>
+          )}
           <button onClick={() => void fetchNextTask()} className={primaryButtonClass}>
             Следующее задание
             <ArrowRight className="h-4 w-4" />

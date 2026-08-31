@@ -16,6 +16,7 @@ import {
 
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedData } from "@/lib/use-authed-data";
+import { useAiChat } from "@/lib/ai-chat-context";
 import { getSubjectIcon } from "@/lib/subject-icons";
 import { daysAndHoursUntil, daysUntil } from "@/lib/date-utils";
 import type { ProfileResponse, ProgressSummaryResponse, SubjectSummaryItem, XpSummaryResponse } from "@/lib/api";
@@ -168,6 +169,7 @@ export default function HomePage() {
   const { auth } = useAuth();
   const confirmed = auth.status === "confirmed";
   const displayName = confirmed ? auth.name ?? "Ученик" : "Гость";
+  const { openChat } = useAiChat();
 
   const { data: profile } = useAuthedData<ProfileResponse>("/api/profile");
   const { data: progress, loading: progressLoading } = useAuthedData<ProgressSummaryResponse>("/api/progress/summary");
@@ -434,18 +436,20 @@ export default function HomePage() {
             </div>
           </section>
 
-          {/* ⚠️ Замена лидерборда — реального рейтинга по XP на бэкенде ещё нет
-              ("Лидерборд по XP — не начато" в паспорте проекта). Используем
-              слот под будущего ИИ-репетитора вместо выдуманных студентов. */}
-          <aside className="flex flex-col items-center justify-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-6 text-center">
+          {/* Раньше здесь был статичный тизер "Скоро" — теперь реальная
+              кнопка, открывающая тот же чат, что и AiFab/сайдбар. */}
+          <button
+            onClick={() => openChat()}
+            className="flex flex-col items-center justify-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-6 text-center transition-colors hover:bg-primary/10"
+          >
             <div className="hex-avatar flex h-12 w-12 items-center justify-center bg-primary/10">
               <Sparkles className="h-5 w-5 text-primary" />
             </div>
             <h3 className="text-sm font-bold">ИИ-репетитор</h3>
             <p className="text-xs text-muted-foreground">
-              Скоро здесь появятся персональные подсказки на основе твоих ошибок.
+              Спроси о теме, которая не даётся, или разбери свежую ошибку.
             </p>
-          </aside>
+          </button>
         </div>
       </div>
     </div>
