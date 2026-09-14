@@ -59,6 +59,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_BASE_URL} />
+        <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_API_BASE_URL} />
+      </head>
       <body className={`${manrope.variable} ${jetbrainsMono.variable} font-sans`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <AuthProvider>{children}</AuthProvider>
