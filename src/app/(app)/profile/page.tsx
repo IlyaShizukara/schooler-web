@@ -22,6 +22,28 @@ function ProfileSkeleton() {
   );
 }
 
+// Раньше "Прогресс обучения" ждал того же самого stillLoading, что и вся
+// страница (profile && subjects && xp && progress разом). Теперь у этого
+// блока свой собственный скелетон — если шапка профиля (profile+xp) уже
+// готова, а прогресс/предметы (обычно более тяжёлый агрегирующий запрос)
+// ещё грузятся, пользователь видит страницу с работающими кнопками
+// "Редактировать"/"Выйти" сразу, а не пустой экран.
+function LearningProgressSkeleton() {
+  return (
+    <section className="glass-panel flex flex-col rounded-2xl p-6 shadow-sm lg:col-span-2">
+      <div className="mb-6 h-6 w-40 animate-pulse rounded bg-surface-2" />
+      <div className="grid flex-1 grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="h-40 animate-pulse rounded-xl bg-surface-2" />
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-24 animate-pulse rounded-xl bg-surface-2" />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function AccuracyRing({ item }: { item: SubjectSummaryItem }) {
   const circumference = 100; // используем dasharray в процентах от периметра
   const dash = Math.max(0, Math.min(100, item.accuracy));
@@ -53,6 +75,69 @@ function AccuracyRing({ item }: { item: SubjectSummaryItem }) {
   );
 }
 
+function LearningProgressSection({
+  progress,
+  subjects,
+}: {
+  progress: ProgressSummaryResponse;
+  subjects: SubjectSummaryItem[];
+}) {
+  const attemptedSubjects = subjects.filter((s) => s.solved > 0).sort((a, b) => b.accuracy - a.accuracy).slice(0, 4);
+  const weeklyTotal = progress.weekly_activity.reduce((sum, p) => sum + p.count, 0);
+
+  return (
+    <section className="glass-panel flex flex-col rounded-2xl p-6 shadow-sm lg:col-span-2">
+      <div className="mb-6 flex items-center justify-between">
+        <h2 className="text-lg font-bold">Прогресс обучения</h2>
+      </div>
+
+      <div className="grid flex-1 grid-cols-1 gap-6 md:grid-cols-2">
+        <div className="relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-background p-4">
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-primary/10 to-transparent" />
+          <div className="relative z-10">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Решено за неделю</p>
+            <p className="font-mono-stat mt-1 text-2xl font-semibold text-primary">{weeklyTotal}</p>
+          </div>
+          <div className="relative z-10 mt-4 flex h-24 items-end gap-2">
+            {progress.weekly_activity.map((p, i) => {
+              const isLast = i === progress.weekly_activity.length - 1;
+              const max = Math.max(...progress.weekly_activity.map((x) => x.count), 1);
+              return (
+                <div
+                  key={p.day}
+                  className="group relative w-full rounded-t-sm transition-colors"
+                  style={{
+                    height: `${Math.max((p.count / max) * 100, 6)}%`,
+                    backgroundColor: isLast
+                      ? "color-mix(in srgb, var(--primary) 55%, transparent)"
+                      : "color-mix(in srgb, var(--primary) 20%, transparent)",
+                  }}
+                >
+                  {isLast && (
+                    <span className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-foreground px-2 py-1 text-[10px] font-semibold text-background opacity-0 transition-opacity group-hover:opacity-100">
+                      Сегодня
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {attemptedSubjects.length === 0 ? (
+            <p className="col-span-2 flex items-center justify-center text-sm text-muted-foreground">
+              Пока нет решённых заданий.
+            </p>
+          ) : (
+            attemptedSubjects.map((s) => <AccuracyRing key={s.slug} item={s} />)
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function ProfilePage() {
   const { auth, logout } = useAuth();
   const confirmed = auth.status === "confirmed";
@@ -71,11 +156,19 @@ export default function ProfilePage() {
     );
   }
 
-  const stillLoading = profileLoading || subjectsLoading || xpLoading || progressLoading || !profile || !subjects || !xp || !progress;
+  // Раньше вся страница ждала profile && subjects && xp && progress разом —
+  // если хотя бы один из четырёх запросов отставал, пользователь смотрел на
+  // общий скелетон, хотя шапка (имя, XP, кнопки) зависит только от
+  // profile+xp. Теперь блокируем рендер только тем, что реально нужно для
+  // шапки; "Прогресс обучения" (progress+subjects) показывает свой
+  // отдельный скелетон и не задерживает всё остальное.
+  const headerReady = !profileLoading && !xpLoading && !!profile && !!xp;
 
-  if (stillLoading) {
+  if (!headerReady) {
     return <ProfileSkeleton />;
   }
+
+  const statsReady = !subjectsLoading && !progressLoading && !!subjects && !!progress;
 
   const displayName = profile.display_name || (auth.status === "confirmed" ? auth.name : null) || "Без имени";
   const avatarLetter = displayName[0]?.toUpperCase() ?? "?";
@@ -87,8 +180,6 @@ export default function ProfilePage() {
     .join(" · ");
 
   const xpProgressPct = Math.min(100, Math.round((xp.xp / (xp.xp + xp.xp_for_next_level)) * 100));
-  const attemptedSubjects = subjects.filter((s) => s.solved > 0).sort((a, b) => b.accuracy - a.accuracy).slice(0, 4);
-  const weeklyTotal = progress.weekly_activity.reduce((sum, p) => sum + p.count, 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -130,7 +221,7 @@ export default function ProfilePage() {
         </div>
       </section>
 
-      {editing && (
+      {editing && subjects && (
         <ProfileEditPanel
           profile={profile}
           subjects={subjects}
@@ -167,56 +258,12 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ---- правая колонка: прогресс обучения ---- */}
-        <section className="glass-panel flex flex-col rounded-2xl p-6 shadow-sm lg:col-span-2">
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-lg font-bold">Прогресс обучения</h2>
-          </div>
-
-          <div className="grid flex-1 grid-cols-1 gap-6 md:grid-cols-2">
-            <div className="relative flex flex-col justify-between overflow-hidden rounded-xl border border-border bg-background p-4">
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-primary/10 to-transparent" />
-              <div className="relative z-10">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Решено за неделю</p>
-                <p className="font-mono-stat mt-1 text-2xl font-semibold text-primary">{weeklyTotal}</p>
-              </div>
-              <div className="relative z-10 mt-4 flex h-24 items-end gap-2">
-                {progress.weekly_activity.map((p, i) => {
-                  const isLast = i === progress.weekly_activity.length - 1;
-                  const max = Math.max(...progress.weekly_activity.map((x) => x.count), 1);
-                  return (
-                    <div
-                      key={p.day}
-                      className="group relative w-full rounded-t-sm transition-colors"
-                      style={{
-                        height: `${Math.max((p.count / max) * 100, 6)}%`,
-                        backgroundColor: isLast
-                          ? "color-mix(in srgb, var(--primary) 55%, transparent)"
-                          : "color-mix(in srgb, var(--primary) 20%, transparent)",
-                      }}
-                    >
-                      {isLast && (
-                        <span className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-foreground px-2 py-1 text-[10px] font-semibold text-background opacity-0 transition-opacity group-hover:opacity-100">
-                          Сегодня
-                        </span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {attemptedSubjects.length === 0 ? (
-                <p className="col-span-2 flex items-center justify-center text-sm text-muted-foreground">
-                  Пока нет решённых заданий.
-                </p>
-              ) : (
-                attemptedSubjects.map((s) => <AccuracyRing key={s.slug} item={s} />)
-              )}
-            </div>
-          </div>
-        </section>
+        {/* ---- правая колонка: прогресс обучения (свой скелетон, не блокирует шапку) ---- */}
+        {statsReady ? (
+          <LearningProgressSection progress={progress} subjects={subjects} />
+        ) : (
+          <LearningProgressSkeleton />
+        )}
 
         {/* ---- настройки: только реально работающие действия ---- */}
         <section className="glass-panel rounded-2xl p-6 shadow-sm lg:col-span-3">

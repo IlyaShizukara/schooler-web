@@ -10,7 +10,7 @@ import { MathContent } from "@/components/math-content";
 import { useAuth } from "@/lib/auth-context";
 import { useAiChat } from "@/lib/ai-chat-context";
 import { usePublicData } from "@/lib/use-public-data";
-import { apiGet, apiGetAuth, apiPost, apiPostAuth } from "@/lib/api";
+import { apiGet, apiGetAuth, apiPost, apiPostAuth, SUBJECTS_CACHE_TTL_MS } from "@/lib/api";
 import { proxiedMediaUrl } from "@/lib/math-content";
 import type { AnswerResult, SubjectSummaryItem, TaskResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -45,7 +45,9 @@ export default function SolveTaskPage() {
   const { openChat } = useAiChat();
 
   // Банк заданий открыт и гостю — usePublicData всегда идёт в сеть.
-  const { data: subjects } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
+  // SUBJECTS_CACHE_TTL_MS — тот же справочник предметов, что и на других
+  // страницах, долгий TTL вместо дефолтных 30с.
+  const { data: subjects } = usePublicData<SubjectSummaryItem[]>("/api/subjects", SUBJECTS_CACHE_TTL_MS);
   const subjectName = subjects?.find((s) => s.slug === params.slug)?.name ?? params.slug;
 
   const [task, setTask] = useState<TaskResponse | null>(null);
@@ -184,7 +186,13 @@ export default function SolveTaskPage() {
 
         {imageUrls.map((url) => (
           <div key={url} className="relative mt-4 flex justify-center rounded-xl border border-border/60 bg-white p-3">
-            <img src={proxiedMediaUrl(url)} alt="" className="max-h-[400px] rounded-lg object-contain" />
+            <img
+              src={proxiedMediaUrl(url)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="max-h-[400px] rounded-lg object-contain"
+            />
           </div>
         ))}
 

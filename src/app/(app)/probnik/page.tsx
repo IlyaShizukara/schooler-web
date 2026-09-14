@@ -9,7 +9,7 @@ import { SubjectsSkeleton } from "@/components/subjects-skeleton";
 import { useAuth } from "@/lib/auth-context";
 import { useAuthedData } from "@/lib/use-authed-data";
 import { usePublicData } from "@/lib/use-public-data";
-import { apiGet, apiGetAuth } from "@/lib/api";
+import { apiGet, apiGetAuth, SUBJECTS_CACHE_TTL_MS } from "@/lib/api";
 import { getSubjectIcon } from "@/lib/subject-icons";
 import { useProbnikRun } from "@/lib/probnik-run-context";
 import { EXAM_TASK_COUNTS, TIME_OPTIONS, formatDurationShort } from "@/lib/probnik-constants";
@@ -25,7 +25,12 @@ export default function ProbnikGeneratorPage() {
   const { start, hint } = useProbnikRun();
 
   // Банк заданий (и темы для режима "topic") открыт и гостю.
-  const { data: subjects, loading: subjectsLoading } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
+  // SUBJECTS_CACHE_TTL_MS — тот же справочник предметов, что и на других
+  // страницах, долгий TTL вместо дефолтных 30с.
+  const { data: subjects, loading: subjectsLoading } = usePublicData<SubjectSummaryItem[]>(
+    "/api/subjects",
+    SUBJECTS_CACHE_TTL_MS
+  );
   // Прогресс/слабые места — честно приватны, у гостя их просто нет.
   const { data: progress } = useAuthedData<ProgressSummaryResponse>("/api/progress/summary");
 

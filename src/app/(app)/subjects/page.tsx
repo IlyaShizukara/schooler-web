@@ -9,7 +9,7 @@ import { SubjectsSkeleton } from "@/components/subjects-skeleton";
 import { useAuth } from "@/lib/auth-context";
 import { usePublicData } from "@/lib/use-public-data";
 import { getSubjectIcon } from "@/lib/subject-icons";
-import type { SubjectSummaryItem } from "@/lib/api";
+import { SUBJECTS_CACHE_TTL_MS, type SubjectSummaryItem } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type FilterKey = "all" | "in_progress" | "not_started";
@@ -112,7 +112,10 @@ export default function SubjectsPage() {
   const confirmed = auth.status === "confirmed";
   // usePublicData вместо useAuthedData — гость тоже должен получить список
   // предметов (просто с solved=0/accuracy=0 по всем, это гарантирует бэкенд).
-  const { data: subjects, loading } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
+  // SUBJECTS_CACHE_TTL_MS вместо дефолтных 30с — справочник предметов почти
+  // не меняется, а эта же страница дёргается при каждом переходе по
+  // Предметы -> Тема -> Решение -> Пробник.
+  const { data: subjects, loading } = usePublicData<SubjectSummaryItem[]>("/api/subjects", SUBJECTS_CACHE_TTL_MS);
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const header = (

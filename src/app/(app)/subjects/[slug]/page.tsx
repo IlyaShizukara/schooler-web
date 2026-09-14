@@ -16,7 +16,7 @@ import { getSubjectIcon } from "@/lib/subject-icons";
 import { pointsWord } from "@/lib/pluralize";
 import { DIFFICULTY_COLOR } from "@/lib/difficulty";
 import { cn } from "@/lib/utils";
-import type { ProbnikHistoryItem, ProfileResponse, SubjectSummaryItem, TopicItem } from "@/lib/api";
+import { SUBJECTS_CACHE_TTL_MS, type ProbnikHistoryItem, type ProfileResponse, type SubjectSummaryItem, type TopicItem } from "@/lib/api";
 
 type FilterKey = "all" | "weak" | "mastered";
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -152,7 +152,10 @@ export default function SubjectTopicsPage() {
   const [filter, setFilter] = useState<FilterKey>("all");
 
   // Банк заданий открыт и гостю — usePublicData всегда идёт в сеть.
-  const { data: subjects } = usePublicData<SubjectSummaryItem[]>("/api/subjects");
+  // SUBJECTS_CACHE_TTL_MS — тот же справочник предметов, что и на других
+  // страницах (Предметы, Решение, Пробник); долгий TTL, чтобы навигация
+  // между ними не перезапрашивала список заново.
+  const { data: subjects } = usePublicData<SubjectSummaryItem[]>("/api/subjects", SUBJECTS_CACHE_TTL_MS);
   const { data: topics, loading } = usePublicData<TopicItem[]>(`/api/subjects/${slug}/topics`);
   // Профиль и история пробников — честно приватные, для гостя useAuthedData
   // корректно вернёт null без похода в сеть, а весь рендер ниже уже готов

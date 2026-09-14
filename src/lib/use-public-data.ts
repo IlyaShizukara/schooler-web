@@ -47,9 +47,9 @@ function notify<T>(entry: CacheEntry<T>) {
   entry.listeners.forEach((listen) => listen());
 }
 
-function load<T>(key: string, path: string, token: string | null, force = false): Promise<void> {
+function load<T>(key: string, path: string, token: string | null, ttlMs: number, force = false): Promise<void> {
   const entry = getEntry<T>(key);
-  const isFresh = entry.fetchedAt > 0 && Date.now() - entry.fetchedAt < CACHE_TTL_MS;
+  const isFresh = entry.fetchedAt > 0 && Date.now() - entry.fetchedAt < ttlMs;
 
   if (entry.promise) return entry.promise; // такой же запрос уже летит — не дублируем
   if (isFresh && !force) return Promise.resolve(); // данные свежие — сеть не трогаем
@@ -78,7 +78,7 @@ function load<T>(key: string, path: string, token: string | null, force = false)
   return promise;
 }
 
-export function usePublicData<T>(path: string) {
+export function usePublicData<T>(path: string, ttlMs: number = CACHE_TTL_MS) {
   const { auth } = useAuth();
   const token = auth.status === "confirmed" ? auth.token : null;
   const key = `${token ?? "guest"}::${path}`;
@@ -89,11 +89,12 @@ export function usePublicData<T>(path: string) {
     const entry = getEntry<T>(key);
     const listener = () => bump((n) => n + 1);
     entry.listeners.add(listener);
-    void load<T>(key, path, token);
+    void load<T>(key, path, token, ttlMs);
     return () => {
       entry.listeners.delete(listener);
     };
-  }, [key, path, token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, path, token, ttlMs]);
 
   const entry = getEntry<T>(key);
   // loading=true показываем только пока данных нет вообще — как и в
