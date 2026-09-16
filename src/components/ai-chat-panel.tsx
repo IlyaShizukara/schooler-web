@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, Send, X } from "lucide-react";
 
+import { MathContent } from "@/components/math-content";
 import { useAiChat } from "@/lib/ai-chat-context";
 import { cn } from "@/lib/utils";
 
@@ -69,17 +70,35 @@ export function AiChatPanel() {
                 : "Привет! Спроси о любой теме из подготовки к экзамену."}
             </p>
           )}
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={cn(
-                "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "mr-auto bg-surface"
-              )}
-            >
-              {m.content ? m.content : <TypingDots />}
-            </div>
-          ))}
+          {messages.map((m, i) => {
+            // Пока это ПОСЛЕДНЕЕ сообщение ассистента и ответ ещё стримится —
+            // показываем как обычный текст, без прогона через MathJax:
+            // формула может прийти "недописанной" (например, открывающий $
+            // уже есть, закрывающего ещё нет) — типсеттинг такого куска
+            // может отрендерить кашу вместо формулы, а сам typesetPromise
+            // на каждый чанк — лишняя работа на каждый токен стрима.
+            // Как только стрим завершается (sending -> false), сообщение
+            // перерендеривается уже через MathContent с полным текстом.
+            const isStreamingIntoThisMessage = sending && m.role === "assistant" && i === messages.length - 1;
+
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+                  m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "mr-auto bg-surface"
+                )}
+              >
+                {!m.content ? (
+                  <TypingDots />
+                ) : m.role === "assistant" && !isStreamingIntoThisMessage ? (
+                  <MathContent text={m.content} />
+                ) : (
+                  m.content
+                )}
+              </div>
+            );
+          })}
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
 
