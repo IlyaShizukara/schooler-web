@@ -93,6 +93,8 @@ export function AiChatPanel() {
               key={i}
               message={m}
               isStreaming={sending && m.role === "assistant" && i === messages.length - 1}
+              taskId={taskId}
+              precedingUserText={messages[i - 1]?.role === "user" ? messages[i - 1].content : undefined}
             />
           ))}
           {error && <p className="text-xs text-destructive">{error}</p>}

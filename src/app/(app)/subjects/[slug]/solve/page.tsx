@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight, Bot, Check, CheckCircle2, Download, Eye, Info, Paperclip, SkipForward, XCircle } from "lucide-react";
 
 import { GuestBanner } from "@/components/guest-banner";
 import { MathContent } from "@/components/math-content";
 import { useAuth } from "@/lib/auth-context";
-import { useAiChat } from "@/lib/ai-chat-context";
 import { usePublicData } from "@/lib/use-public-data";
 import { apiGet, apiGetAuth, apiPost, apiPostAuth, SUBJECTS_CACHE_TTL_MS } from "@/lib/api";
 import { proxiedMediaUrl } from "@/lib/math-content";
@@ -42,7 +41,7 @@ export default function SolveTaskPage() {
 
   const { auth } = useAuth();
   const confirmed = auth.status === "confirmed";
-  const { openChat } = useAiChat();
+  const router = useRouter();
 
   // Банк заданий открыт и гостю — usePublicData всегда идёт в сеть.
   // SUBJECTS_CACHE_TTL_MS — тот же справочник предметов, что и на других
@@ -327,7 +326,7 @@ export default function SolveTaskPage() {
           </div>
           {confirmed && !result.is_correct && (
             <button
-              onClick={() => openChat(currentTask.id)}
+              onClick={() => router.push(`/ai-tutor?task=${currentTask.id}`)}
               className="flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10"
             >
               <Bot className="h-4 w-4" />

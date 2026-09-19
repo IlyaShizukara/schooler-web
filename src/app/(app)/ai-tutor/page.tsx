@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Send } from "lucide-react";
 
 import { GuestPrompt } from "@/components/guest-prompt";
 import { AiChatMessageBubble } from "@/components/ai-chat-message-bubble";
@@ -12,6 +13,17 @@ import { cn } from "@/lib/utils";
 export default function AiTutorPage() {
   const { auth } = useAuth();
   const confirmed = auth.status === "confirmed";
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // ?task=123 — сюда теперь ведёт кнопка "Объяснить с ИИ-репетитором" со
+  // страницы решения задания (раньше открывала модалку) — компактная
+  // модалка физически не вмещает диаграмму/структурированный разбор так,
+  // как это нужно. Общий чат из AiFab по-прежнему модалка (см.
+  // ai-chat-panel.tsx) — там это контекстная быстрая помощь без ухода со
+  // страницы, полноэкранный переход был бы лишним.
+  const taskParam = searchParams.get("task");
+  const taskId = taskParam !== null && !Number.isNaN(Number(taskParam)) ? Number(taskParam) : null;
+
   const { messages, sending, historyLoading, error, socratic, setSocratic, openChat, closeChat, sendMessage } =
     useAiChat();
   const [input, setInput] = useState("");
@@ -22,17 +34,17 @@ export default function AiTutorPage() {
   }, [messages]);
 
   useEffect(() => {
-    // openChat() без task_id — это тот же сквозной "общий" чат, что и при
-    // открытии из AiFab/сайдбара без привязки к заданию (см.
-    // _get_or_create_chat_session в ai_tutor.py: task_id IS NULL — один
-    // сеанс на пользователя). При уходе со страницы закрываем чат
-    // (closeChat сбрасывает isOpen и обрывает незавершённый запрос) —
-    // иначе isOpen остался бы true, и AiChatPanel вылез бы модалкой поверх
-    // следующей страницы, на которую перейдёт пользователь.
-    if (confirmed) openChat();
+    // openChat(taskId) — тот же контракт, что был у модалки: с taskId это
+    // сеанс, привязанный к конкретному заданию (переиспользуется при
+    // повторном заходе на то же задание), без — сквозной общий сеанс на
+    // пользователя (см. _get_or_create_chat_session в ai_tutor.py). При
+    // уходе со страницы закрываем чат (closeChat сбрасывает isOpen и
+    // обрывает незавершённый запрос) — иначе isOpen остался бы true, и
+    // модалка неожиданно вылезла бы поверх следующей страницы.
+    if (confirmed) openChat(taskId ?? undefined);
     return () => closeChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [confirmed]);
+  }, [confirmed, taskId]);
 
   if (!confirmed) {
     return (
@@ -50,10 +62,23 @@ export default function AiTutorPage() {
 
   return (
     <div className="flex h-[calc(100vh-140px)] flex-col md:h-[calc(100vh-140px)]">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold md:text-3xl">ИИ-репетитор</h1>
-          <p className="text-sm text-muted-foreground">Спроси о любой теме из подготовки к экзамену</p>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {taskId != null && (
+            <button
+              onClick={() => router.back()}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+              aria-label="Назад к заданию"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold md:text-3xl">ИИ-репетитор</h1>
+            <p className="text-sm text-muted-foreground">
+              {taskId != null ? "Разбор текущего задания" : "Спроси о любой теме из подготовки к экзамену"}
+            </p>
+          </div>
         </div>
         <button
           onClick={() => setSocratic(!socratic)}
@@ -81,7 +106,9 @@ export default function AiTutorPage() {
           )}
           {!historyLoading && messages.length === 0 && (
             <p className="text-sm text-muted-foreground">
-              Привет! Спроси о любой теме из подготовки к экзамену — объясню по шагам.
+              {taskId != null
+                ? "Спроси, что непонятно в этом задании — объясню по шагам на основе его условия и правильного ответа."
+                : "Привет! Спроси о любой теме из подготовки к экзамену — объясню по шагам."}
             </p>
           )}
           {messages.map((m, i) => (
@@ -89,6 +116,8 @@ export default function AiTutorPage() {
               key={i}
               message={m}
               isStreaming={sending && m.role === "assistant" && i === messages.length - 1}
+              taskId={taskId}
+              precedingUserText={messages[i - 1]?.role === "user" ? messages[i - 1].content : undefined}
             />
           ))}
           {error && <p className="text-xs text-destructive">{error}</p>}
