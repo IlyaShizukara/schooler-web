@@ -18,9 +18,23 @@ interface AiChatContextValue {
   sending: boolean;
   historyLoading: boolean;
   error: string | null;
+  socratic: boolean;
+  setSocratic: (value: boolean) => void;
   openChat: (taskId?: number) => void;
   closeChat: () => void;
   sendMessage: (text: string) => Promise<void>;
+}
+
+const SOCRATIC_STORAGE_KEY = "schooler:ai-chat:socratic";
+
+function readStoredSocratic(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = window.localStorage.getItem(SOCRATIC_STORAGE_KEY);
+    return raw === null ? true : raw === "1";
+  } catch {
+    return true; // localStorage может быть недоступен (приватный режим и т.п.)
+  }
 }
 
 const AiChatContext = createContext<AiChatContextValue | null>(null);
@@ -33,12 +47,25 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
   const [sending, setSending] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Тумблер "Режим: Сократический" — сохраняем выбор в localStorage
+  // (per-device предпочтение ученика, не персональные данные), чтобы не
+  // сбрасывался при каждом открытии чата.
+  const [socratic, setSocraticState] = useState<boolean>(readStoredSocratic);
   const abortRef = useRef<AbortController | null>(null);
   // Счётчик, чтобы игнорировать ответ устаревшего запроса истории, если
   // пользователь успел закрыть чат и открыть другой (по другому заданию)
   // до того, как первый fetch вернулся — иначе более медленный старый
   // ответ может перезаписать уже актуальные messages нового чата.
   const historyRequestIdRef = useRef(0);
+
+  const setSocratic = useCallback((value: boolean) => {
+    setSocraticState(value);
+    try {
+      window.localStorage.setItem(SOCRATIC_STORAGE_KEY, value ? "1" : "0");
+    } catch {
+      // недоступен localStorage — просто не сохраняем между сессиями
+    }
+  }, []);
 
   const openChat = useCallback(
     (newTaskId?: number) => {
@@ -108,7 +135,7 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
           // (пользователь, task_id) из БД (см. ai_tutor.py), поэтому здесь
           // достаточно отправить только новое сообщение. Меньше трафика и
           // не нужно самому следить за MAX_HISTORY_MESSAGES на фронте.
-          body: JSON.stringify({ message: trimmed, task_id: taskId }),
+          body: JSON.stringify({ message: trimmed, task_id: taskId, socratic }),
           signal: controller.signal,
         });
 
@@ -143,12 +170,24 @@ export function AiChatProvider({ children }: { children: React.ReactNode }) {
         setSending(false);
       }
     },
-    [auth, taskId, sending]
+    [auth, taskId, sending, socratic]
   );
 
   return (
     <AiChatContext.Provider
-      value={{ isOpen, taskId, messages, sending, historyLoading, error, openChat, closeChat, sendMessage }}
+      value={{
+        isOpen,
+        taskId,
+        messages,
+        sending,
+        historyLoading,
+        error,
+        socratic,
+        setSocratic,
+        openChat,
+        closeChat,
+        sendMessage,
+      }}
     >
       {children}
     </AiChatContext.Provider>

@@ -1,31 +1,30 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Bot, Send, X } from "lucide-react";
 
-import { MathContent } from "@/components/math-content";
 import { useAiChat } from "@/lib/ai-chat-context";
+import { AiChatMessageBubble } from "@/components/ai-chat-message-bubble";
 import { cn } from "@/lib/utils";
 
-function TypingDots() {
-  return (
-    <span className="inline-flex gap-1 py-1">
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" />
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.15s]" />
-      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0.3s]" />
-    </span>
-  );
-}
-
 export function AiChatPanel() {
-  const { isOpen, taskId, messages, sending, error, closeChat, sendMessage } = useAiChat();
+  const { isOpen, taskId, messages, sending, error, socratic, setSocratic, closeChat, sendMessage } = useAiChat();
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
+  // На полноэкранной странице /ai-tutor общий чат уже отрисован во весь
+  // экран этой же страницей (см. app/ai-tutor/page.tsx) — если модалка
+  // всё равно откроется поверх (например, isOpen остался true с прошлой
+  // страницы), получится чат поверх чата. Модалка остаётся рабочей на
+  // любой другой странице — там это по-прежнему контекстная помощь без
+  // ухода со страницы (AiFab, "Объяснить с ИИ-репетитором" при решении).
+  if (pathname === "/ai-tutor") return null;
   if (!isOpen) return null;
 
   function handleSend() {
@@ -53,13 +52,32 @@ export function AiChatPanel() {
               {taskId != null && <p className="text-xs text-muted-foreground">По текущему заданию</p>}
             </div>
           </div>
-          <button
-            onClick={closeChat}
-            className="rounded-full p-1.5 text-muted-foreground hover:bg-surface"
-            aria-label="Закрыть чат"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSocratic(!socratic)}
+              title={
+                socratic
+                  ? "Сократический режим включён: сначала подсказки, потом полное решение"
+                  : "Сократический режим выключен: сразу полное решение"
+              }
+              className={cn(
+                "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                socratic
+                  ? "border-primary/30 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:bg-surface"
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", socratic ? "bg-primary" : "bg-muted-foreground")} />
+              Сократ.
+            </button>
+            <button
+              onClick={closeChat}
+              className="rounded-full p-1.5 text-muted-foreground hover:bg-surface"
+              aria-label="Закрыть чат"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div ref={scrollRef} className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
@@ -70,35 +88,13 @@ export function AiChatPanel() {
                 : "Привет! Спроси о любой теме из подготовки к экзамену."}
             </p>
           )}
-          {messages.map((m, i) => {
-            // Пока это ПОСЛЕДНЕЕ сообщение ассистента и ответ ещё стримится —
-            // показываем как обычный текст, без прогона через MathJax:
-            // формула может прийти "недописанной" (например, открывающий $
-            // уже есть, закрывающего ещё нет) — типсеттинг такого куска
-            // может отрендерить кашу вместо формулы, а сам typesetPromise
-            // на каждый чанк — лишняя работа на каждый токен стрима.
-            // Как только стрим завершается (sending -> false), сообщение
-            // перерендеривается уже через MathContent с полным текстом.
-            const isStreamingIntoThisMessage = sending && m.role === "assistant" && i === messages.length - 1;
-
-            return (
-              <div
-                key={i}
-                className={cn(
-                  "max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                  m.role === "user" ? "ml-auto bg-primary text-primary-foreground" : "mr-auto bg-surface"
-                )}
-              >
-                {!m.content ? (
-                  <TypingDots />
-                ) : m.role === "assistant" && !isStreamingIntoThisMessage ? (
-                  <MathContent text={m.content} />
-                ) : (
-                  m.content
-                )}
-              </div>
-            );
-          })}
+          {messages.map((m, i) => (
+            <AiChatMessageBubble
+              key={i}
+              message={m}
+              isStreaming={sending && m.role === "assistant" && i === messages.length - 1}
+            />
+          ))}
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
 

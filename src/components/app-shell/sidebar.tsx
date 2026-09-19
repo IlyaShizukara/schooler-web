@@ -2,19 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 
 import { NAV_ITEMS } from "@/lib/nav-items";
 import { useAuth } from "@/lib/auth-context";
 import { useProfile } from "@/lib/profile-context";
-import { useAiChat } from "@/lib/ai-chat-context";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { auth, startLogin } = useAuth();
+  const { auth } = useAuth();
   const { profile } = useProfile();
-  const { openChat } = useAiChat();
 
   const confirmed = auth.status === "confirmed";
   const displayName = confirmed ? auth.name ?? "Ученик" : "Гость";
@@ -53,21 +51,6 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto px-2 pb-1">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="hex-avatar flex h-10 w-10 shrink-0 items-center justify-center bg-primary/10 dark:border dark:border-primary/30">
-            <Bot className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <p className="text-xs font-bold">ИИ-репетитор</p>
-            <button
-              onClick={() => (confirmed ? openChat() : void startLogin())}
-              className="text-xs font-bold text-primary hover:underline"
-            >
-              {confirmed ? "Открыть чат" : "Войти, чтобы открыть"}
-            </button>
-          </div>
-        </div>
-
         <div className="flex items-center gap-3 border-t border-border pt-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary">
             {displayName[0]?.toUpperCase() ?? "?"}
