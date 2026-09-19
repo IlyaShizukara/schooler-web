@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Send } from "lucide-react";
 
@@ -10,7 +10,21 @@ import { useAuth } from "@/lib/auth-context";
 import { useAiChat } from "@/lib/ai-chat-context";
 import { cn } from "@/lib/utils";
 
+// useSearchParams() обязан быть внутри <Suspense> — иначе `next build`
+// падает на пререндере этой страницы с "Error occurred prerendering page
+// /ai-tutor" (известная особенность App Router: страница с
+// useSearchParams() без Suspense не может быть статически
+// оптимизирована). Сама страница поэтому — тонкая обёртка, вся логика
+// внутри AiTutorPageInner.
 export default function AiTutorPage() {
+  return (
+    <Suspense fallback={<div className="pt-4 text-sm text-muted-foreground">Загрузка...</div>}>
+      <AiTutorPageInner />
+    </Suspense>
+  );
+}
+
+function AiTutorPageInner() {
   const { auth } = useAuth();
   const confirmed = auth.status === "confirmed";
   const router = useRouter();
