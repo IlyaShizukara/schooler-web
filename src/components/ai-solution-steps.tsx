@@ -1,4 +1,4 @@
-import { MathContent } from "@/components/math-content";
+import { MathContentWithGraphs } from "@/components/math-content-with-graphs";
 import type { ParsedSolution } from "@/lib/parse-step-solution";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ const DEFAULT_TYPE_STYLE = "bg-surface-2 text-muted-foreground";
 export function AiSolutionSteps({ solution }: { solution: ParsedSolution }) {
   return (
     <div className="flex flex-col gap-3">
-      {solution.intro && <MathContent text={solution.intro} />}
+      {solution.intro && <MathContentWithGraphs text={solution.intro} />}
 
       {solution.steps.map((step, i) => (
         <div key={i} className="rounded-xl border border-border/60 bg-background/40 p-3">
@@ -32,14 +32,14 @@ export function AiSolutionSteps({ solution }: { solution: ParsedSolution }) {
               {step.type}
             </span>
           </div>
-          <MathContent text={step.body} />
+          <MathContentWithGraphs text={step.body} />
         </div>
       ))}
 
       {solution.result && (
         <div className="rounded-xl border border-success/30 bg-success/10 p-3">
           <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-success">Результат</p>
-          <MathContent text={solution.result} />
+          <MathContentWithGraphs text={solution.result} />
         </div>
       )}
     </div>

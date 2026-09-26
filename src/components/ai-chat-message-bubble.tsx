@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Box } from "lucide-react";
 
-import { MathContent } from "@/components/math-content";
+import { MathContentWithGraphs } from "@/components/math-content-with-graphs";
 import { parseStepSolution } from "@/lib/parse-step-solution";
 import { AiSolutionSteps } from "@/components/ai-solution-steps";
 import { AiSolidViewer } from "@/components/ai-solid-viewer";
@@ -96,7 +96,7 @@ export function AiChatMessageBubble({
       ) : parsedSolution ? (
         <AiSolutionSteps solution={parsedSolution} />
       ) : message.role === "assistant" && !isStreaming ? (
-        <MathContent text={message.content} />
+        <MathContentWithGraphs text={message.content} />
       ) : (
         message.content
       )}
